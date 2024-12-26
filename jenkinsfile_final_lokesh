@@ -1,0 +1,74 @@
+pipeline {
+    agent any
+    
+    tools {
+        maven 'Maven_3.9.9'
+        }
+
+    stages {
+        stage('checkout the code') {
+            steps {
+                git branch: 'main', url: 'https://github.com/loky1997/mindcircuit_simple_project.git'
+            }
+        }
+        stage('build the package') {
+            steps {
+                sh 'mvn clean package'
+            }
+        }
+        stage("execute sonarqube analysis"){
+           environment {
+                SONAR_URL = "http://16.170.140.17:9000"
+                } 
+            steps {
+                withCredentials([string(credentialsId: 'SonarQube_token', variable: 'SonarQube_token')]) {
+                    sh "mvn sonar:sonar -Dsonar.login=$SonarQube_token -Dsonar.host.url=${SONAR_URL}"
+                }
+            }
+            
+            /*
+           steps {
+               sh "mvn clean sonar:sonar -Dsonar.login=68a0db37f376083c53138afd28111748772010db -Dsonar.host.url=http://16.170.140.17:9000"
+           } 
+           
+           */
+        }
+        stage("Building the docker images"){
+            steps {
+                sh 'docker build -t lokeshhs591/mindcircuitapp:${BUILD_NUMBER} .'
+            }
+        }
+        stage("push the docker image to docker hub"){
+            steps{
+                script{
+                    withCredentials([string(credentialsId: 'DockerHub_cred', variable: 'DockerHub_cred')]) {
+                        sh " docker login -u lokeshhs591 -p $DockerHub_cred"
+                    }
+                    sh "docker push lokeshhs591/mindcircuitapp:${BUILD_NUMBER}"
+                }
+            }
+        }
+        stage("update k8 manifest files in github"){
+            environment {
+                GITHUB_REPO_NAME="mindcircuit_simple_project"
+                GITHUB_USER_NAME="loky1997"
+            }
+            steps{
+                echo 'Update Deployment File'
+                withCredentials([string(credentialsId: 'Github_Token', variable: 'Github_token')]) {
+                    
+                    sh '''
+                    git config user.email "lokeshhs591@gmail.com"
+                    git config user.name "loky1997"
+                    BUILD_NUMBER=${BUILD_NUMBER}
+                    sed -i "s/mindcircuitapp:.*/mindcircuitapp:${BUILD_NUMBER}/g" deploymentfiles/deployment.yml
+                    git add .
+                    git commit -m "Update deployment image to version ${BUILD_NUMBER}"
+                    git push https://${Github_token}@github.com/${GITHUB_USER_NAME}/${GITHUB_REPO_NAME} HEAD:main
+                '''
+                
+                }
+            }
+        }
+    }
+}
