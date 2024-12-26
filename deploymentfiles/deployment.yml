@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: mc-app
-        image: lokeshhs591/mindcircuitapp:41
+        image: lokeshhs591/mindcircuitapp:42
         ports:
         - containerPort: 8080
 
